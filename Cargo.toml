@@ -1,0 +1,12 @@
+[package]
+name = "laplacian"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+alg = { path = "../../toppo/alg" }
+topo_spaces = { path = "../../toppo/topo_spaces" }
+geom = { path = "../../toppo/geom" }
+analysis = { path = "../../toppo/analysis" }
+rand = "*"
+plotters = "*"
