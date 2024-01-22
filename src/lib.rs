@@ -16,7 +16,7 @@ pub struct WeightedLaplacianHandle {
 }
 
 impl WeightedLaplacianHandle {
-    pub fn new_from_points(points: Vec<ConstVector<f64, 2>>, n_holes: Option<usize>) -> Self {
+    pub fn new_from_points(points: Vec<ConstVector<f64, 2>>, n_holes: Option<usize>, obstacles: Option<Vec<Vec<ConstVector<f64, 2>>>>) -> Self {
         let n_holes = n_holes.unwrap_or(1);
 
         println!("There are {} vertices.", points.len());
@@ -51,9 +51,7 @@ impl WeightedLaplacianHandle {
         // println!("edges = {edges:?}");
         println!("There are {} edges.", edges.len());
 
-
         let n = edges.len();
-
 
         // compute 'signs'
         let mut signs = Matrix::zero(edges.len(), edges.len());
@@ -70,7 +68,6 @@ impl WeightedLaplacianHandle {
         }
 
         let mut tmp = Matrix::<AtomicSmoothFn>::zero(n, n);
-
 
         // compute laplacian
         let laplacian = MultiVarFn::new((n*n, n)).set(|k, f, x| {
@@ -276,7 +273,7 @@ mod test {
             ConstVector::from([-rt3/2.0, -1.0/2.0]),
             ConstVector::from([ rt3/2.0, -1.0/2.0])
         ];
-        let handle = WeightedLaplacianHandle::new_from_points(points, None);
+        let handle = WeightedLaplacianHandle::new_from_points(points, None, None);
 
         assert!(
             ((l.clone() - handle.laplacian_evaluated.clone()).frobenius_norm()/(l.clone()).frobenius_norm()).abs() < 0.000001,
@@ -299,7 +296,7 @@ mod test {
         
         // the first computation
         let triangulation1 = delaunay_triangulation(&points).1;
-        let handle = WeightedLaplacianHandle::new_from_points(points, None);
+        let handle = WeightedLaplacianHandle::new_from_points(points, None, None);
         let lambda1 = handle.laplacian_evaluated.as_matrix().spectrum_with_n_th_eigenvec_symmetric(n-1).0;
         println!("{:.5}", handle.laplacian_evaluated.as_matrix().spectrum());
         let d_norm = (&*handle.dlambda_dvertices).transpose().two_norm();
@@ -307,7 +304,7 @@ mod test {
 
         // the second computation
         let triangulation2 = delaunay_triangulation(&points).1;
-        let handle = WeightedLaplacianHandle::new_from_points(points, None);
+        let handle = WeightedLaplacianHandle::new_from_points(points, None, None);
         let lambda2 = handle.laplacian_evaluated.as_matrix().spectrum_with_n_th_eigenvec_symmetric(n-1).0;
 
         // make sure that the triangulation is the same (so that there is no discrete chnage in the complex)
