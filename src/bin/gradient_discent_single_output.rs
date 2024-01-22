@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
                     for (ends, w) in edge_weights {
                         graphic.draw_series(LineSeries::new(
                             ends.into_iter(),
-                            get_color_bwr( (w / 2.0).min(1.0) ).filled().stroke_width(2)
+                            get_color_bwr( (w * 2.0).min(1.0) ).filled().stroke_width(2)
                         ))?;
                     }
                 }

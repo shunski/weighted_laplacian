@@ -9,6 +9,7 @@ pub enum Collection {
     OneHole(usize),
     Meshlike,
     Uniform(usize),
+    HexagonalLattice,
 }
 
 impl Collection {
@@ -103,6 +104,18 @@ impl Collection {
                     }
                 }
                 out
+            },
+            Self::HexagonalLattice => {
+                let lattice_basis = [
+                    ConstVector::from( [1.0, 0f64]) * 12.0,
+                    ConstVector::from( [0.5, 3f64.sqrt()/2.0]) * 12.0,
+                ];
+
+                (-10..10).map(|x| (-10..10).map(move |y| (x,y) ))
+                    .flatten()
+                    .map(|(x,y)| lattice_basis[0] * x as f64 + lattice_basis[1] * y as f64)
+                    .filter(|v| v.two_norm() <= 50.0 )
+                    .collect::<Vec<_>>()
             }
         }
     }
@@ -112,7 +125,8 @@ impl Collection {
             Self::FourPoints => String::from( "FourPoints" ),
             Self::OneHole(n) => format!( "OneHoleBy({n})Points" ),
             Self::Meshlike => format!( "Meshlike" ),
-            Self::Uniform(n) => format!("Uniform({n})")
+            Self::Uniform(n) => format!("Uniform({n})"),
+            Self::HexagonalLattice => String::from( "HexagonalLattice" ),
         }
     }
 }

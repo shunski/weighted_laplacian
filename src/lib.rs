@@ -2,6 +2,7 @@ use alg::lin_alg::{Matrix, SubMatrix, ConstVector, SparseMatrix};
 use geom::delaunay_triangulation;
 use analysis::{MultiVarFn, AtomicSmoothFn};
 use analysis::Function;
+use topo_spaces::graph::AdjacentVerticesIter;
 // use std::time::Instant;
 
 #[allow(unused)]
@@ -318,5 +319,171 @@ mod test {
             "lambda2 - lambda1 = {}, but\n d_norm*d_norm*step_size = {}", 
             lambda2 - lambda1, d_norm*d_norm*step_size
         );
+    }
+}
+
+pub struct WeightedLaplacianHandleCustomWeight {
+    weights: Matrix<f64>,
+    laplacian: MultiVarFn,
+    n_points: usize,
+    n_edges: usize,
+    triangles_with_low_w: Vec<usize>,
+    edges_with_low_w: Vec<usize>,
+}
+
+impl WeightedLaplacianHandleCustomWeight {
+    pub fn new(points: Vec<ConstVector<f64, 2>>) -> (Self, Vec<[ConstVector<f64, 2>;2]>, Vec<[ConstVector<f64, 2>;3]>) {
+        // get the delaunay triangulation
+        let (_, mut triangles) = delaunay_triangulation( &points );
+        debug_assert!(triangles.iter().all(|[a,b,c]| a < b && b < c ));
+        triangles.sort();
+        debug_assert!(triangles.iter().zip(triangles.iter().skip(1)).all(|(x,y)| x < y ) );
+
+        // each element in 'edges' corresponds to two indeces of the boundaries
+        let edges: Vec<_> = {
+            let mut edges: Vec<_> = triangles.iter().map(|&[i,j,k]| {
+                    [[i,j], [i,k], [j,k]].into_iter()
+                })
+                .flatten()
+                .collect();
+
+            edges.sort();
+            edges.dedup();
+            edges
+        };
+
+        let n = edges.len();
+        let m = triangles.len();
+
+        let mut signs = Matrix::zero(edges.len(), edges.len());
+        for (e1, e2, sign) in triangles.iter()
+            .map(|&[i,j,k]|{
+                [([i,j], [i,k], -1), ([i,j], [j,k], 1), ([i,k], [j,k],-1)].into_iter()
+            })
+            .flatten()
+        {
+            let i = edges.binary_search(&e1).unwrap();
+            let j = edges.binary_search(&e2).unwrap();
+            signs[(i,j)] = sign;
+            signs[(j,i)] = sign;
+        }
+
+        let mut tmp = Matrix::<AtomicSmoothFn>::zero(n, n);
+
+        // compute laplacian
+        let laplacian = MultiVarFn::new((n*n, n+m)).set(|k, f, x| {
+            let (i,j) = (k/n, k%n);
+
+            if i > j { *f = tmp[(j,i)].clone(); return };
+            
+            // now i <= j
+            *f = if i==j {
+                let the_other_two_edges = triangles.iter()
+                    .filter(|&&t| t.contains( &edges[i][0] ) && t.contains( &edges[i][1] ))
+                    .map(|t| {
+                        let v_not_in_edge = *t.iter().find( |v| !edges[i].contains(v) ).unwrap();
+
+                        let mut e1 = [v_not_in_edge, edges[i][0]];
+                        e1.sort();
+                        let e1 = edges.binary_search(&e1).unwrap();
+
+                        let mut e2 = [v_not_in_edge, edges[i][1]];
+                        e2.sort();
+                        let e2 = edges.binary_search(&e2).unwrap();
+
+                        let mut face = [v_not_in_edge, edges[i][0], edges[i][1]];
+                        face.sort();
+                        let face = triangles.binary_search(&face).unwrap();
+
+                        [e1, e2, face]
+                    } )
+                    .take(2)
+                    .collect::<Vec<_>>();
+
+
+
+                // each edge must have either one or two incident face
+                assert!( the_other_two_edges.len() == 1 || the_other_two_edges.len() == 2 );
+                let mut g = AtomicSmoothFn::Zero;
+                for [a,b, face] in the_other_two_edges {
+                    g += x[n+face].powi(2) / x[i].powi(2);
+                } 
+
+                tmp[(i,j)] = g;
+                tmp[(i,j)].clone()
+            } else if edges[i].iter().find(|k| edges[j].contains(k) ).is_some() {
+                // if the edges i and j are adjacent, ...
+                let face = {
+                    let mut face = vec![ edges[i][0], edges[i][1], edges[j][0], edges[j][1]];
+                    face.sort();
+                    face.dedup();
+                    let face: [usize; 3] = face.try_into().unwrap();
+                    triangles.binary_search(&face)
+                };
+
+                tmp[(i,j)] = if let Ok(face) = face {
+                    x[n+face].powi(2) / x[i] / x[j] * signs[(i,j)] as f64
+                } else {
+                    AtomicSmoothFn::Zero
+                };
+
+                tmp[(i,j)].clone()
+            } else {
+                AtomicSmoothFn::Zero
+            };
+        });
+
+        let mut weights = Matrix::zero(n+m, 1);
+        for i in 0..n+m {
+            weights[(i, 0)] = 1.0;
+        }
+
+        let triangles_with_low_w = (0..triangles.len()).filter(|&i| triangles[i].contains(&15) || triangles[i].contains(&45) ).collect::<Vec<_>>();
+        let edges_with_low_w = (0..edges.len()).filter(|&i| edges[i].contains(&15) || edges[i].contains(&45) ).collect::<Vec<_>>();
+
+        let out = Self {
+            weights,
+            laplacian,
+            n_points: points.len(),
+            n_edges: edges.len(),
+            triangles_with_low_w,
+            edges_with_low_w
+        };
+
+        let edges: Vec<_> = edges.into_iter().map(|[i,j]| [points[i], points[j]] ).collect();
+        let triangles: Vec<_> = triangles.into_iter().map(|[i,j, k]| [points[i], points[j], points[k]] ).collect();
+
+        (out, edges, triangles)
+    }
+}
+
+impl Iterator for WeightedLaplacianHandleCustomWeight {
+    type Item = (Matrix<f64>, Matrix<f64>, Matrix<f64>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        for idx in &self.triangles_with_low_w {
+            self.weights[(self.n_edges + idx, 0)] /= 1.5;
+        }
+
+        for idx in &self.edges_with_low_w {
+            self.weights[(*idx, 0)] /= 1.5;
+        }
+
+        
+        let l = self.laplacian.eval(&self.weights);
+        let mut laplacian = Matrix::zero(self.n_edges, self.n_edges);
+        for (i,j) in (0..self.n_edges).map(|i| (0..self.n_edges).map(move |j| (i,j) ) ).flatten() {
+            laplacian[(i,j)] = l[(i*self.n_edges + j, 0)];
+        }
+        assert!((0..self.n_edges).all(|i| (i..self.n_edges).all( |j| laplacian[(i,j)] == laplacian[(j,i)] )));
+        let (spectrum, v) = laplacian.spectrum_with_n_smallest_eigenvecs_symmetric(self.n_points+10-1);
+        let spectrum = spectrum[(self.n_points-2.., 0)].as_matrix();
+        let v = v[(..,self.n_points-2..)].as_matrix();
+
+        println!("n_points = {}", self.n_points);
+        println!("self.n_edges = {}", self.n_edges);
+        // println!("spectrum={spectrum:?}");
+
+        Some((self.weights.clone(), spectrum, v)) 
     }
 }
