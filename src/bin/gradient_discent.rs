@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
 
     for t in 1..=100 {
         let start_time = Instant::now();
-        let handle = WeightedLaplacianHandle::new_from_points(points, None);
+        let handle = WeightedLaplacianHandle::new_from_points(points, None, None);
         let elapsed_time = start_time.elapsed();
         println!("step {t} took {:.5} seconds", elapsed_time.as_secs_f64());
 

@@ -4,7 +4,7 @@ use plotters::prelude::*;
 use laplacian::WeightedLaplacianHandle;
 use laplacian::embedding_lib::Collection;
 
-const FOLLOWS_POSITIVE_OF_GRADIENT: bool = false;
+const FOLLOWS_POSITIVE_OF_GRADIENT: bool = true;
 const N_HOLES_TO_CREATE: usize = 50;
 const STEP_SIZE: f64 = 70000.0;
 const DRAW_EDGES: bool = true;
@@ -14,7 +14,7 @@ const COLORING_BY_EIGENVEC: bool = false;
 
 fn main() -> Result<(), Box<dyn std::error::Error>>  {
     // let embedding_type = Collection::FourPoints;
-    let embedding_type = Collection::Uniform(300);
+    let embedding_type = Collection::Meshlike;
     let mut points = embedding_type.get();
     
     let gradient_type_desc = if FOLLOWS_POSITIVE_OF_GRADIENT { "CollapsingHoles" } else { "CreatingHoles" };
@@ -34,9 +34,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
     for t in 0..=80 {
         let start_time = Instant::now();
         let handle = if FOLLOWS_POSITIVE_OF_GRADIENT {
-            WeightedLaplacianHandle::new_from_points(points, None)
+            WeightedLaplacianHandle::new_from_points(points, None, None)
         } else {
-            WeightedLaplacianHandle::new_from_points(points, Some(N_HOLES_TO_CREATE))
+            WeightedLaplacianHandle::new_from_points(points, Some(N_HOLES_TO_CREATE), None)
         };
         let elapsed_time = start_time.elapsed();
         println!("step {t} took {:.5} seconds", elapsed_time.as_secs_f64());

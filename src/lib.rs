@@ -1,8 +1,7 @@
 use alg::lin_alg::{Matrix, SubMatrix, ConstVector, SparseMatrix};
 use geom::delaunay_triangulation;
-use analysis::{MultiVarFn, AtomicSmoothFn};
-use analysis::Function;
-use topo_spaces::graph::AdjacentVerticesIter;
+use analysis::{MultiVarFn, AtomicSmoothFn, Function};
+use obstacles::Obstacle;
 // use std::time::Instant;
 
 #[allow(unused)]
@@ -17,7 +16,7 @@ pub struct WeightedLaplacianHandle {
 }
 
 impl WeightedLaplacianHandle {
-    pub fn new_from_points(points: Vec<ConstVector<f64, 2>>, n_holes: Option<usize>, obstacles: Option<Vec<Vec<ConstVector<f64, 2>>>>) -> Self {
+    pub fn new_from_points(points: Vec<ConstVector<f64, 2>>, n_holes: Option<usize>, obstacles: Option<Vec<Obstacle>>) -> Self {
         let n_holes = n_holes.unwrap_or(1);
 
         println!("There are {} vertices.", points.len());
@@ -28,6 +27,8 @@ impl WeightedLaplacianHandle {
         let (_, triangles) = delaunay_triangulation( &points );
         // println!("triangles = {triangles:?}");
 
+        let mut n_points = points.len();
+
         // then convert points into the form of 2*n dimensional vector 
         let points_vector_form = {
             let mut out = Matrix::zero(points.len() * 2, 1);
@@ -37,33 +38,79 @@ impl WeightedLaplacianHandle {
             out
         };
 
+
+        // remove triangles that are quotiented out.
+        // If 'obstacles' is 'None', then there is no change in 'triangles'.
+        // 'removed_triangles' contains removed triangles.
+        let (triangles, removed_triangles) = if let Some(obstacles) = obstacles {
+            let mut removed_triangles = Vec::new();
+            let triangles = triangles.into_iter()
+                .map(|t_idx| (t_idx, [points[t_idx[0]], points[t_idx[1]], points[t_idx[2]]]))
+                .filter_map(|(t_idx, t)|
+                    if obstacles.iter().any(|obstacle| obstacle.intersects(t)) {
+                        removed_triangles.push(t_idx);
+                        None 
+                    } else {
+                        Some(t_idx)
+                    }
+                )
+                .collect();
+            (triangles, removed_triangles)
+        } else {
+            (triangles, Vec::new())
+        };
+
         // each element in 'edges' corresponds to two indeces of the boundaries
-        let edges: Vec<[usize; 2]> = {
+        let (edges, removed_edges) = {
             let mut edges: Vec<_> = triangles.iter().map(|&[i,j,k]| {
                     [[i,j], [i,k], [j,k]].into_iter()
                 })
                 .flatten()
                 .collect();
-
             edges.sort();
             edges.dedup();
-            edges
+            
+
+            let mut removed_edges: Vec<_> = removed_triangles.iter().map(|&[i,j,k]| {
+                    [[i,j], [i,k], [j,k]].into_iter()
+                })
+                .flatten()
+                .collect();
+            removed_edges.sort();
+            removed_edges.dedup();
+
+            edges = edges.into_iter().filter(|edge| removed_edges.binary_search(&edge).is_err()).collect();
+            (edges, removed_edges)
         };
+
+        // update 'n_points'
+        n_points = (0..points.len()).filter(|&i| removed_edges.iter().all(|&e| e[1]!=i ) ).count();
+        
         // println!("edges = {edges:?}");
         println!("There are {} edges.", edges.len());
 
         let n = edges.len();
 
         // compute 'signs'
-        let mut signs = Matrix::zero(edges.len(), edges.len());
+        let mut signs = Matrix::zero(n, n);
         for (e1, e2, sign) in triangles.iter()
             .map(|&[i,j,k]|{
-                [([i,j], [i,k], -1), ([i,j], [j,k], 1), ([i,k], [j,k],-1)].into_iter()
+                [([i,j], [i,k], -1), ([i,j], [j,k], 1), ([i,k], [j,k],-1)]
             })
             .flatten()
         {
-            let i = edges.binary_search(&e1).unwrap();
-            let j = edges.binary_search(&e2).unwrap();
+            let i = if let Ok(i) = edges.binary_search(&e1) {
+                i
+            } else {
+                continue;
+            };
+
+            let j = if let Ok(j) = edges.binary_search(&e2) {
+                j
+            } else {
+                continue;
+            };
+
             signs[(i,j)] = sign;
             signs[(j,i)] = sign;
         }
@@ -78,30 +125,27 @@ impl WeightedLaplacianHandle {
             
             // now i <= j
             *f = if i==j {
-                let the_other_two_edges = triangles.iter()
-                    .filter(|&&t| t.contains( &edges[i][0] ) && t.contains( &edges[i][1] ))
-                    .map(|t| {
-                        let v_not_in_edge = *t.iter().find( |v| !edges[i].contains(v) ).unwrap();
-
-                        let mut e1 = [v_not_in_edge, edges[i][0]];
-                        e1.sort();
-                        let e1 = edges.binary_search(&e1).unwrap();
-
-                        let mut e2 = [v_not_in_edge, edges[i][1]];
-                        e2.sort();
-                        let e2 = edges.binary_search(&e2).unwrap();
-
-                        [e1, e2]
-                    } )
-                    .take(2)
-                    .collect::<Vec<_>>();
-
-                // each edge must have either one or two incident face
-                assert!( the_other_two_edges.len() == 1 || the_other_two_edges.len() == 2 );
                 let mut f = AtomicSmoothFn::Zero;
-                for [a,b] in the_other_two_edges {
-                    f += x[a] * x[b];
-                } 
+                for t in triangles.iter()
+                    .filter(|&&t| t.contains( &edges[i][0] ) && t.contains( &edges[i][1] ))
+                {
+                    let v_not_in_edge = *t.iter().find( |v| !edges[i].contains(v) ).unwrap();
+
+                    let mut e1 = [v_not_in_edge, edges[i][0]];
+                    e1.sort();
+                    let e1 = edges.binary_search(&e1).ok();
+
+                    let mut e2 = [v_not_in_edge, edges[i][1]];
+                    e2.sort();
+                    let e2 = edges.binary_search(&e2).ok();
+
+                    f += match (e1, e2) {
+                        (Some(e1), Some(e2)) => x[e1] * x[e2],
+                        (Some(e1), None) => x[e1] * 1.0,
+                        (None, Some(e2)) => x[e2] * 1.0,
+                        (None, None) => AtomicSmoothFn::Zero,
+                    };
+                }
 
                 tmp[(i,j)] = f;
                 tmp[(i,j)].clone()
@@ -115,6 +159,8 @@ impl WeightedLaplacianHandle {
 
                 tmp[(i,j)] = if let Ok(the_other_edge) = edges.binary_search(&the_other_edge) {
                     x[i].powf(0.5) * x[j].powf(0.5) * signs[(i,j)] as f64 * x[the_other_edge]
+                } else if removed_edges.binary_search(&the_other_edge).is_ok() {
+                    x[i].powf(0.5) * x[j].powf(0.5) * signs[(i,j)] as f64
                 } else {
                     AtomicSmoothFn::Zero
                 };
@@ -146,10 +192,9 @@ impl WeightedLaplacianHandle {
 
         // let elapsed_time = start_time.elapsed();
         // println!("constructing laplacian took {:.5} seconds", elapsed_time.as_secs_f64());
-
         // let start_time = Instant::now();
-        let (_spectrum, v) = laplacian_evaluated.clone().spectrum_with_n_th_eigenvec_symmetric(points.len()-1 + n_holes-1);
-        // println!("spectrum={}", spectrum[(points.len()-2, 0)]);
+        let (spectrum, v) = laplacian_evaluated.clone().spectrum_with_n_th_eigenvec_symmetric(n_points-1 + n_holes-1);
+        println!("spectrum={}", spectrum);
         // println!("v={v:?}");
         // let elapsed_time = start_time.elapsed();
         // println!("computation of spectrum took {:.5} seconds", elapsed_time.as_secs_f64());
@@ -247,6 +292,7 @@ impl WeightedLaplacianHandle {
 }
 
 pub mod embedding_lib;
+pub mod obstacles;
 
 #[cfg(test)]
 mod test {
