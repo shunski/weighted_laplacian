@@ -16,12 +16,17 @@ pub struct WeightedLaplacianHandle {
 }
 
 impl WeightedLaplacianHandle {
-    pub fn new_from_points(points: Vec<ConstVector<f64, 2>>, n_holes: Option<usize>, obstacles: Option<Vec<Obstacle>>) -> Self {
+    pub fn new_from_points(mut points: Vec<ConstVector<f64, 2>>, n_holes: Option<usize>, obstacles: Option<Vec<Obstacle>>) -> Self {
         let n_holes = n_holes.unwrap_or(1);
 
         println!("There are {} vertices.", points.len());
 
+        let n_robots = points.len();
+
         // let start_time = Instant::now();
+        if let Some(obstacles) = &obstacles {
+            obstacles.iter().flat_map(|obstacle| obstacle.contour_iter()).for_each(|&p| points.push(p) );
+        }
 
         // get the delaunay triangulation
         let (_, triangles) = delaunay_triangulation( &points );
@@ -44,21 +49,31 @@ impl WeightedLaplacianHandle {
         // 'removed_triangles' contains removed triangles.
         let (triangles, removed_triangles) = if let Some(obstacles) = obstacles {
             let mut removed_triangles = Vec::new();
+            // let triangles = triangles.into_iter()
+            //     .map(|t_idx| (t_idx, [points[t_idx[0]], points[t_idx[1]], points[t_idx[2]]]))
+            //     .filter_map(|(t_idx, t)|
+            //         if obstacles.iter().any(|obstacle| obstacle.intersects(t)) {
+            //             removed_triangles.push(t_idx);
+            //             None 
+            //         } else {
+            //             Some(t_idx)
+            //         }
+            //     )
+            //     .collect();
             let triangles = triangles.into_iter()
-                .map(|t_idx| (t_idx, [points[t_idx[0]], points[t_idx[1]], points[t_idx[2]]]))
-                .filter_map(|(t_idx, t)|
-                    if obstacles.iter().any(|obstacle| obstacle.intersects(t)) {
-                        removed_triangles.push(t_idx);
-                        None 
+                .filter_map(|t| if t.into_iter().all(|t| t >= n_robots) {
+                        removed_triangles.push(t);
+                        None
                     } else {
-                        Some(t_idx)
-                    }
-                )
+                        Some(t)
+                    })
                 .collect();
             (triangles, removed_triangles)
         } else {
             (triangles, Vec::new())
         };
+
+        println!("removed_triangles.len() = {}", removed_triangles.len());
 
         // each element in 'edges' corresponds to two indeces of the boundaries
         let (edges, removed_edges) = {
@@ -82,6 +97,7 @@ impl WeightedLaplacianHandle {
             edges = edges.into_iter().filter(|edge| removed_edges.binary_search(&edge).is_err()).collect();
             (edges, removed_edges)
         };
+        println!("removed_edges.len() = {}", removed_edges.len());
 
         // update 'n_points'
         n_points = (0..points.len()).filter(|&i| removed_edges.iter().all(|&e| e[1]!=i ) ).count();

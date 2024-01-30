@@ -4,7 +4,6 @@ use alg::lin_alg::ConstVector;
 
 #[derive(Clone)]
 pub struct Obstacle {
-    center: ConstVector<f64, 2>,
     contour: Vec<ConstVector<f64, 2>>,
 }
 
@@ -13,52 +12,95 @@ impl Obstacle {
     pub fn get() -> Vec<Self> {
         let mut out = Vec::new();
     
-        let resolution = 100;
-        let diameter = 10.0;
-        let center = ConstVector::from([0.0, 0.0]);
-    
-        let contour = (0..resolution).map( |i| {
-            let t = 2.0 * PI / resolution as f64 * i as f64;
-            ConstVector::from([t.cos(), t.sin()]) * diameter + center
-        }).collect::<Vec<_>>();
-        let obstacle = Obstacle{center, contour};
-    
-        out.push(obstacle);
+        let obstacle = {
+            let contour = vec![
+                ConstVector::from([-30.0, -30.0]),
+                ConstVector::from([-30.0,  10.0]),
+                ConstVector::from([-25.0,  10.0]),
+                ConstVector::from([-25.0, -25.0]),
+                ConstVector::from([ 10.0, -25.0]),
+                ConstVector::from([ 10.0, -30.0]),
+            ];
+            Obstacle{ contour }
+        };
+        out.push( obstacle );
+
+
+
+        let obstacle = {
+            let contour = vec![
+                ConstVector::from([-10.0, -5.0]),
+                ConstVector::from([-10.0,  0.0]),
+                ConstVector::from([ 30.0,  0.0]),
+                ConstVector::from([ 30.0, -5.0]),
+            ];
+            Obstacle{ contour }
+        };
+        out.push( obstacle );
+
+
+        let obstacle = {
+            let contour = vec![
+                ConstVector::from([-10.0, 20.0]),
+                ConstVector::from([-10.0, 25.0]),
+                ConstVector::from([ 30.0, 25.0]),
+                ConstVector::from([ 30.0, 20.0]),
+            ];
+            Obstacle{ contour }
+        };
+        out.push( obstacle );
     
         out
     }
+    
 
     pub fn contour_iter(&'_ self) -> impl Iterator<Item = &'_ ConstVector<f64, 2>> {
-        self.contour.iter().skip(1).chain([self.contour.first().unwrap()])
+        self.contour.iter()
     }
     
     
     pub fn contains(&self, p: &ConstVector<f64, 2>) -> bool {
         let p = *p;
-        self.contour.iter()
+        let integral = self.contour.iter()
             .zip( self.contour.iter().skip(1).chain([self.contour.first().unwrap()]) )
-            .all( |(&v, &w)| {
-                let v_w = w - v;
-                let perp = ConstVector::from([-v_w[1], v_w[0]]);
-                debug_assert_eq!(v_w.dot(perp), 0.0, "computation of 'perp' is wrong.");
-                (self.center-v).dot(perp) * (p-v).dot(perp) > 0_f64
+            .map( |(&v, &w)| {
+                let v = v - p;
+                let w = w - p;
+                let v_perp = ConstVector::from([-v[1], v[0]]);
+                assert!(v.dot(v_perp)==0_f64);
+
+                let a = v.two_norm();
+                let b = w.two_norm();
+                let c = (w-v).two_norm();
+
+                let sign = if (w-v).dot(v_perp)>0.0 {1.0} else {-1.0};
+
+                let theta = sign * ((a*a + b*b - c*c)/(2.0*a*b)).acos();
+                theta
             } )
+            .sum::<f64>();
+        
+        // if the integral is zero, then 'p' is not contained in self.
+        // if the integral is 2*PI (or -2*PI), then 'p' is contained in self.
+        integral.abs() > PI
     }
 
     pub fn intersects(&self, triangle: [ConstVector<f64, 2>; 3]) -> bool {
         let edges = [
-            (triangle[0], [triangle[1], triangle[2]]),
-            (triangle[1], [triangle[0], triangle[2]]),
-            (triangle[2], [triangle[0], triangle[1]])
+            (triangle[0], triangle[1]),
+            (triangle[1], triangle[0]),
+            (triangle[2], triangle[0])
         ];
     
-        self.contour.iter().any(|&p| {
-            edges.into_iter().all( |(v, e)| {
-                let e_perp = ConstVector::from([-(e[1]-e[0])[1], (e[1]-e[0])[0]]);
-                let e0_v = v-e[0];
-                let e0_p = p-e[0];
-                e0_v.dot(e_perp) * e0_p.dot(e_perp) > 0_f64
-            })
+        self.contour.iter()
+            .zip( self.contour.iter().skip(1).chain([self.contour.first().unwrap()]) )
+            .any(|(&p, &q)| {
+                edges.into_iter().any( |(v, w)| {
+                    let quad = Self{contour: vec![p,v,q,w]};
+                    let x = (p+q)/2.0;
+                    let y = (v+w)/2.0;
+                    quad.contains(&x) && quad.contains(&y)
+                })
         })
     }
 
