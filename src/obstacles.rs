@@ -110,4 +110,21 @@ impl Obstacle {
             .filter(|&p| !self.contains(&p) )
             .collect::<Vec<_>>();
     }
+
+
+    pub fn subdivide_contour(&mut self, max_length: f64 ) {
+        let mut subdivided_contour = Vec::new();
+        for (&p, &q) in self.contour.iter().zip(self.contour.iter().skip(1)) {
+            let v = q-p;
+            let n = (v.two_norm() / max_length) as usize + 1;
+            let u = v / n as f64;
+            for i in 0..n {
+                subdivided_contour.push(u * i as f64 + p);
+            }
+        }
+
+        subdivided_contour.push(*self.contour.last().unwrap());
+
+        self.contour = subdivided_contour;
+    }
 }

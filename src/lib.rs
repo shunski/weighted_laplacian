@@ -16,10 +16,25 @@ pub struct WeightedLaplacianHandle {
 }
 
 impl WeightedLaplacianHandle {
-    pub fn new_from_points(mut points: Vec<ConstVector<f64, 2>>, n_holes: Option<usize>, obstacles: Option<Vec<Obstacle>>) -> Self {
+    pub fn new_from_points(mut points: Vec<ConstVector<f64, 2>>, n_holes: Option<usize>, mut obstacles: Option<Vec<Obstacle>>) -> Self {
         let n_holes = n_holes.unwrap_or(1);
 
         println!("There are {} vertices.", points.len());
+
+        if let Some(obstacles) = &mut obstacles {
+            let smallest_d = points
+                .iter()
+                .map(|&p| 
+                    points.iter()
+                        .map(|&q| (p-q).two_norm())
+                        .min_by(|x,y| x.partial_cmp(y).unwrap())
+                        .unwrap()
+                )
+                .min_by(|x,y| x.partial_cmp(y).unwrap())
+                .unwrap();
+
+            obstacles.iter_mut().for_each(|obstacle| obstacle.subdivide_contour(smallest_d / 2.0));
+        };
 
         let n_robots = points.len();
 
