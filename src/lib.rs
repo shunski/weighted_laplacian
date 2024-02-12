@@ -13,32 +13,21 @@ pub struct WeightedLaplacianHandle {
     weights_evaluated: Matrix<f64>,
     fiedler_vec: Matrix<f64>,
     laplacian_evaluated: Matrix<f64>,
+    obstacles: Option<Vec<Obstacle>>
 }
 
 impl WeightedLaplacianHandle {
-    pub fn new_from_points(mut points: Vec<ConstVector<f64, 2>>, n_holes: Option<usize>, mut obstacles: Option<Vec<Obstacle>>) -> Self {
+    pub fn new_from_points(mut points: Vec<ConstVector<f64, 2>>, n_holes: Option<usize>, obstacles: Option<Vec<Obstacle>>) -> Self {
         let n_holes = n_holes.unwrap_or(1);
 
         println!("There are {} vertices.", points.len());
 
-        if let Some(obstacles) = &mut obstacles {
-            let smallest_d = points
-                .iter()
-                .map(|&p| 
-                    points.iter()
-                        .map(|&q| (p-q).two_norm())
-                        .min_by(|x,y| x.partial_cmp(y).unwrap())
-                        .unwrap()
-                )
-                .min_by(|x,y| x.partial_cmp(y).unwrap())
-                .unwrap();
-
-            obstacles.iter_mut().for_each(|obstacle| obstacle.subdivide_contour(smallest_d / 2.0));
-        };
-
         let n_robots = points.len();
 
         // let start_time = Instant::now();
+
+
+        // add the contour to the points.
         if let Some(obstacles) = &obstacles {
             obstacles.iter().flat_map(|obstacle| obstacle.contour_iter()).for_each(|&p| points.push(p) );
         }
@@ -62,7 +51,7 @@ impl WeightedLaplacianHandle {
         // remove triangles that are quotiented out.
         // If 'obstacles' is 'None', then there is no change in 'triangles'.
         // 'removed_triangles' contains removed triangles.
-        let (triangles, removed_triangles) = if let Some(obstacles) = obstacles {
+        let (triangles, removed_triangles) = if obstacles.is_some() {
             let mut removed_triangles = Vec::new();
             // let triangles = triangles.into_iter()
             //     .map(|t_idx| (t_idx, [points[t_idx[0]], points[t_idx[1]], points[t_idx[2]]]))
@@ -269,7 +258,8 @@ impl WeightedLaplacianHandle {
             dlambda_dvertices,
             weights_evaluated,
             fiedler_vec: v[(.., 0)].as_matrix(),
-            laplacian_evaluated
+            laplacian_evaluated,
+            obstacles
         }
     }
 
@@ -298,14 +288,23 @@ impl WeightedLaplacianHandle {
         &*self.fiedler_vec
     }
 
-    pub fn vertex_pos_iter(&self) -> impl '_ + Iterator<Item = (f64, f64)> {
-        self.points.iter().map(|x| (x[0], x[1]) )
+    pub fn vertex_pos_iter(&self, obstacles: Option<&Vec<Obstacle>>) -> impl '_ + Iterator<Item = (f64, f64)> {
+        let ob_size = if let Some(o)=&obstacles {o.iter().map(|o| o.contour_size()).sum()} else {0};
+        self.points.iter()
+            .take(self.points.len() - ob_size)
+            .map(|x| (x[0], x[1]) )
     }
 
-    pub fn move_points<const POSITIVE_GRAD: bool>(self, step_size: f64, max_move: f64) -> Vec<ConstVector<f64, 2>> {
+    pub fn move_points<const POSITIVE_GRAD: bool>(self, step_size: f64, max_move: f64, obstacles: Option<&Vec<Obstacle>>) -> Vec<ConstVector<f64, 2>> {
         let sign = if POSITIVE_GRAD { 1.0 } else { -1.0 };
         let dv = {
             let mut dv = self.dlambda_dvertices.transpose() * step_size * sign;
+
+            let ob_size = if let Some(o)=&obstacles {o.iter().map(|o| o.contour_size()).sum()} else {0};
+            for i in (self.points.len() - ob_size)*2..self.points.len()*2 {
+                dv[(i,0)] = 0.0;
+            }
+
             if dv.two_norm() > max_move {
                 dv *= max_move / dv.two_norm();
             }
@@ -378,7 +377,7 @@ mod test {
         let lambda1 = handle.laplacian_evaluated.as_matrix().spectrum_with_n_th_eigenvec_symmetric(n-1).0;
         println!("{:.5}", handle.laplacian_evaluated.as_matrix().spectrum());
         let d_norm = (&*handle.dlambda_dvertices).transpose().two_norm();
-        let points = handle.move_points::<true>(step_size, 1.0);
+        let points = handle.move_points::<true>(step_size, 1.0, None);
 
         // the second computation
         let triangulation2 = delaunay_triangulation(&points).1;

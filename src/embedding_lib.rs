@@ -38,7 +38,7 @@ impl Collection {
             Self::Meshlike => {
                 let mut out = Vec::new();
                 let mut add_points = |[v, w]: [ConstVector<f64, 2>; 2]| {
-                    let n = ((v-w).two_norm() / 2.5497) as usize;
+                    let n = ((v-w).two_norm() / 4.0) as usize;
                     let mut i = 0;
                     while i < n {
                         let s = i as f64 / n as f64;

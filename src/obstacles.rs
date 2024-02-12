@@ -1,6 +1,6 @@
 use std::f64::consts::PI;
-
 use alg::lin_alg::ConstVector;
+use rand::Rng;
 
 #[derive(Clone)]
 pub struct Obstacle {
@@ -56,6 +56,10 @@ impl Obstacle {
 
     pub fn contour_iter(&'_ self) -> impl Iterator<Item = &'_ ConstVector<f64, 2>> {
         self.contour.iter()
+    }
+
+    pub fn contour_size(&'_ self) -> usize {
+        self.contour.len()
     }
     
     
@@ -126,5 +130,14 @@ impl Obstacle {
         subdivided_contour.push(*self.contour.last().unwrap());
 
         self.contour = subdivided_contour;
+    }
+
+    pub fn add_noise(&mut self, amp: f64) {
+        let mut rng = rand::thread_rng();
+        for p in &mut self.contour {
+            let theta = rng.gen_range(0.0..PI);
+            let r = rng.gen_range(-amp..amp);
+            *p += ConstVector::from([r*theta.cos(), r*theta.sin()]);
+        }
     }
 }
