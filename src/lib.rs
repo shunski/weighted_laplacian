@@ -13,11 +13,11 @@ pub struct WeightedLaplacianHandle {
     weights_evaluated: Matrix<f64>,
     fiedler_vec: Matrix<f64>,
     laplacian_evaluated: Matrix<f64>,
-    obstacles: Option<Vec<Obstacle>>
+    n_robots: usize,
 }
 
 impl WeightedLaplacianHandle {
-    pub fn new_from_points(mut points: Vec<ConstVector<f64, 2>>, n_holes: Option<usize>, obstacles: Option<Vec<Obstacle>>) -> Self {
+    pub fn new_from_points(mut points: Vec<ConstVector<f64, 2>>, n_holes: Option<usize>, obstacles: Option<&[Obstacle]>) -> Self {
         let n_holes = n_holes.unwrap_or(1);
 
         println!("There are {} vertices.", points.len());
@@ -28,9 +28,11 @@ impl WeightedLaplacianHandle {
 
 
         // add the contour to the points.
-        if let Some(obstacles) = &obstacles {
+        if let Some(obstacles) = obstacles {
             obstacles.iter().flat_map(|obstacle| obstacle.contour_iter()).for_each(|&p| points.push(p) );
         }
+
+        let points = points;
 
         // get the delaunay triangulation
         let (_, triangles) = delaunay_triangulation( &points );
@@ -169,7 +171,8 @@ impl WeightedLaplacianHandle {
 
                 tmp[(i,j)] = f;
                 tmp[(i,j)].clone()
-            } else if let Some(&common_vertex) = edges[i].iter().find(|k| edges[j].contains(k) ) {
+            } else if let Some(&common_vertex) = edges[i].iter().find(|k| edges[j].contains(k) ) { 
+                ?????? there are more adjacent cases.
                 // if the edges i and j are adjacent, ...
                 let mut the_other_edge = [
                     *edges[i].iter().find(|&&k| k != common_vertex ).unwrap(),
@@ -259,7 +262,7 @@ impl WeightedLaplacianHandle {
             weights_evaluated,
             fiedler_vec: v[(.., 0)].as_matrix(),
             laplacian_evaluated,
-            obstacles
+            n_robots
         }
     }
 
@@ -273,47 +276,57 @@ impl WeightedLaplacianHandle {
 
     pub fn edge_pos_iter(&'_ self) -> impl '_ + Iterator<Item = [(f64, f64); 2]> {
         self.edges.iter()
+            .filter(|&&[x,y]| x < self.n_robots && y < self.n_robots )
             .map(|&[x, y]| [(self.points[x][0], self.points[x][1]), (self.points[y][0], self.points[y][1])] )
     }
 
     pub fn weight_iter(&'_ self) -> impl '_ + Iterator<Item = f64> {
-        (0..self.edges.len()).map( |i| self.weights_evaluated[(i,0)] )
+        self.edges.iter().enumerate()
+            .filter(|&(_, &[x,y])| x < self.n_robots && y < self.n_robots )
+            .map( |(i,_)| self.weights_evaluated[(i,0)] )
     }
 
     pub fn fiedler_vec_iter(&'_ self) -> impl '_ + Iterator<Item = f64> {
-        (0..self.edges.len()).map( |i| self.fiedler_vec[(i,0)] )
+        self.edges.iter().enumerate()
+            .filter(|&(_, &[x,y])| x < self.n_robots && y < self.n_robots )
+            .map( |(i,_)| self.fiedler_vec[(i,0)] )
     }
 
     pub fn fiedler_vec(&'_ self) -> &'_ SubMatrix<f64> {
         &*self.fiedler_vec
     }
 
-    pub fn vertex_pos_iter(&self, obstacles: Option<&Vec<Obstacle>>) -> impl '_ + Iterator<Item = (f64, f64)> {
-        let ob_size = if let Some(o)=&obstacles {o.iter().map(|o| o.contour_size()).sum()} else {0};
+    pub fn vertex_pos_iter(&self) -> impl '_ + Iterator<Item = (f64, f64)> {
         self.points.iter()
-            .take(self.points.len() - ob_size)
+            .take(self.n_robots)
             .map(|x| (x[0], x[1]) )
     }
 
-    pub fn move_points<const POSITIVE_GRAD: bool>(self, step_size: f64, max_move: f64, obstacles: Option<&Vec<Obstacle>>) -> Vec<ConstVector<f64, 2>> {
+    pub fn virtual_robot_pos_iter(&self) -> impl '_ + Iterator<Item = (f64, f64)> {
+        self.points.iter()
+            .skip(self.n_robots)
+            .map(|x| (x[0], x[1]) )
+    }
+
+    pub fn move_points<const POSITIVE_GRAD: bool>(self, step_size: f64, max_move: f64) -> Vec<ConstVector<f64, 2>> {
         let sign = if POSITIVE_GRAD { 1.0 } else { -1.0 };
         let dv = {
-            let mut dv = self.dlambda_dvertices.transpose() * step_size * sign;
+            let mut dv = self.dlambda_dvertices.transpose() * (step_size * sign);
 
-            let ob_size = if let Some(o)=&obstacles {o.iter().map(|o| o.contour_size()).sum()} else {0};
-            for i in (self.points.len() - ob_size)*2..self.points.len()*2 {
-                dv[(i,0)] = 0.0;
-            }
+            // for i in self.n_robots*2..self.points.len()*2 {
+            //     dv[(i,0)] = 0.0;
+            // }
 
             if dv.two_norm() > max_move {
                 dv *= max_move / dv.two_norm();
             }
             dv
         };
-        // let mut dv = self.dlambda_dvertices.transpose() * sign;
-        // dv /= dv.two_norm(); 
-        let new_pos = self.points_vector_form + dv;
-        let points = (0..(new_pos.size().0)/2)
+        
+        let new_pos = &self.points_vector_form[(..self.n_robots*2,0)] + &dv[(..self.n_robots*2,0)];
+
+        // 'points' contains all the points 
+        let points = (0..self.n_robots)
             .map(|i| ConstVector::from( [new_pos[(i*2, 0)], new_pos[(i*2+1, 0)]] ))
             .collect::<Vec<_>>();
         
@@ -377,7 +390,7 @@ mod test {
         let lambda1 = handle.laplacian_evaluated.as_matrix().spectrum_with_n_th_eigenvec_symmetric(n-1).0;
         println!("{:.5}", handle.laplacian_evaluated.as_matrix().spectrum());
         let d_norm = (&*handle.dlambda_dvertices).transpose().two_norm();
-        let points = handle.move_points::<true>(step_size, 1.0, None);
+        let points = handle.move_points::<true>(step_size, 1.0);
 
         // the second computation
         let triangulation2 = delaunay_triangulation(&points).1;

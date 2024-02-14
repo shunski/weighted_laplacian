@@ -118,7 +118,7 @@ impl Obstacle {
 
     pub fn subdivide_contour(&mut self, max_length: f64 ) {
         let mut subdivided_contour = Vec::new();
-        for (&p, &q) in self.contour.iter().zip(self.contour.iter().skip(1)) {
+        for (&p, &q) in self.contour.iter().zip(self.contour.iter().skip(1).chain([self.contour.first().unwrap()])) {
             let v = q-p;
             let n = (v.two_norm() / max_length) as usize + 1;
             let u = v / n as f64;
@@ -127,15 +127,13 @@ impl Obstacle {
             }
         }
 
-        subdivided_contour.push(*self.contour.last().unwrap());
-
         self.contour = subdivided_contour;
     }
 
     pub fn add_noise(&mut self, amp: f64) {
         let mut rng = rand::thread_rng();
         for p in &mut self.contour {
-            let theta = rng.gen_range(0.0..PI);
+            let theta = rng.gen_range(0.0..2.0*PI);
             let r = rng.gen_range(-amp..amp);
             *p += ConstVector::from([r*theta.cos(), r*theta.sin()]);
         }
