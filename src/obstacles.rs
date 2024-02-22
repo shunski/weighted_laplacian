@@ -29,8 +29,8 @@ impl Obstacle {
 
         let obstacle = {
             let contour = vec![
-                ConstVector::from([-10.0, -5.0]),
-                ConstVector::from([-10.0,  0.0]),
+                ConstVector::from([-5.0, -5.0]),
+                ConstVector::from([-5.0,  0.0]),
                 ConstVector::from([ 30.0,  0.0]),
                 ConstVector::from([ 30.0, -5.0]),
             ];
@@ -41,8 +41,8 @@ impl Obstacle {
 
         let obstacle = {
             let contour = vec![
-                ConstVector::from([-10.0, 20.0]),
-                ConstVector::from([-10.0, 25.0]),
+                ConstVector::from([-5.0, 20.0]),
+                ConstVector::from([-5.0, 25.0]),
                 ConstVector::from([ 30.0, 25.0]),
                 ConstVector::from([ 30.0, 20.0]),
             ];
@@ -56,6 +56,12 @@ impl Obstacle {
 
     pub fn contour_iter(&'_ self) -> impl Iterator<Item = &'_ ConstVector<f64, 2>> {
         self.contour.iter()
+    }
+
+    pub fn contour_segment_iter(&'_ self) -> impl Iterator<Item = (&'_ ConstVector<f64, 2>, &'_ ConstVector<f64, 2>)> {
+        self.contour_iter().zip(
+            self.contour_iter().skip(1).chain([self.contour.first().unwrap()])
+        )
     }
 
     pub fn contour_size(&'_ self) -> usize {
@@ -116,6 +122,14 @@ impl Obstacle {
     }
 
 
+    pub fn remove_points_closer_than(&self, threshold: f64, points: &mut Vec<ConstVector<f64, 2>>) {
+        *points = points.iter()
+            .copied()
+            .filter(|&p| self.distance_from(p).two_norm() > threshold )
+            .collect::<Vec<_>>();
+    }
+
+
     pub fn subdivide_contour(&mut self, max_length: f64 ) {
         let mut subdivided_contour = Vec::new();
         for (&p, &q) in self.contour.iter().zip(self.contour.iter().skip(1).chain([self.contour.first().unwrap()])) {
@@ -137,5 +151,30 @@ impl Obstacle {
             let r = rng.gen_range(-amp..amp);
             *p += ConstVector::from([r*theta.cos(), r*theta.sin()]);
         }
+    }
+
+    // returns a distance from the point to the obstacle as a vector pointing TO the obstacle FROM the point.
+    // The length of the returned vector is the distance between the obstacle and the point.
+    pub fn distance_from(&self, p: ConstVector<f64, 2>) -> ConstVector<f64, 2> {
+        self.contour_segment_iter()
+            .map(
+                |(&x, &y)| {
+                    let v = y - x;
+                    let w = p - x;
+
+                    let det = (v[0]*w[1]-w[0]*v[1]).abs();
+
+                    // The height of a parallelogram is its area divided by the base.
+                    let d = det / v.two_norm();
+                    
+                    let n = ConstVector::from([-v[1], v[0]]);
+
+                    // detemine the direction of the output so that it points TO the obstacle FROM the point.
+                    let sign = if n.dot(w)>0.0 {-1.0} else {1.0}; 
+                    n * (sign*d/n.two_norm())
+                } 
+            )
+            .min_by(|x,y| x.two_norm().partial_cmp( &y.two_norm() ).unwrap())
+            .unwrap()
     }
 }

@@ -2,7 +2,10 @@ use std::f64::consts::PI;
 
 use alg::lin_alg::ConstVector;
 use geom::delaunay_triangulation;
+use plotters::element::Circle;
 use rand::prelude::*;
+
+use crate::obstacles::Obstacle;
 
 pub enum Collection {
     FourPoints,
@@ -10,6 +13,7 @@ pub enum Collection {
     Meshlike,
     Uniform(usize),
     HexagonalLattice,
+    ForObstacles,
 }
 
 impl Collection {
@@ -38,7 +42,7 @@ impl Collection {
             Self::Meshlike => {
                 let mut out = Vec::new();
                 let mut add_points = |[v, w]: [ConstVector<f64, 2>; 2]| {
-                    let n = ((v-w).two_norm() / 3.0) as usize;
+                    let n = ((v-w).two_norm() / 2.5) as usize;
                     let mut i = 0;
                     while i < n {
                         let s = i as f64 / n as f64;
@@ -116,6 +120,53 @@ impl Collection {
                     .map(|(x,y)| lattice_basis[0] * x as f64 + lattice_basis[1] * y as f64)
                     .filter(|v| v.two_norm() <= 50.0 )
                     .collect::<Vec<_>>()
+            },
+            Self::ForObstacles => {
+                let n = 500;
+                let mut out = Vec::new();
+                while out.len() < n {
+                    let p = ConstVector::from( [ rng.gen_range(-37.0..37.0), rng.gen_range(-37.0..37.0) ]);
+                    if out.iter().all(|&q| (p-q).two_norm() > 2.0 ) {
+                        out.push(p);
+                    }
+                }
+                
+                let circles = [
+                    (ConstVector::from([23.0, 10.0]), 8.0),
+                    (ConstVector::from([2.0, 10.0]), 8.0),
+                    (ConstVector::from([12.0, -17.0]), 10.0),
+                    (ConstVector::from([-15.0, -15.0]), 10.0),
+                    (ConstVector::from([-16.0, 17.0]), 10.0),
+                ];
+
+                for (center, r) in circles {
+                    for p in &mut out{
+                        let d = (*p - center).two_norm();
+                        if d >= r {continue;}
+
+                        let s = (d/r).cbrt();
+                        *p = center + (*p - center) * (s * r / d)
+                    }
+                }
+
+                
+                // Remove points that are too close to each other.
+                let mut i=0;
+                while i < out.len() {
+                    let mut j = i+1;
+                    while j < out.len() {
+                        if (out[i]-out[j]).two_norm() < 1.2 {
+                            out.remove(j);
+                        } else {
+                            j += 1;
+                        }
+                    }
+                    i += 1;
+                }
+
+                println!("There are {} robots.", out.len());
+
+                out
             }
         }
     }
@@ -127,6 +178,7 @@ impl Collection {
             Self::Meshlike => format!( "Meshlike" ),
             Self::Uniform(n) => format!("Uniform({n})"),
             Self::HexagonalLattice => String::from( "HexagonalLattice" ),
+            Self::ForObstacles => String::from( "ForObstacles" ),
         }
     }
 }

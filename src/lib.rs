@@ -9,6 +9,7 @@ pub struct WeightedLaplacianHandle {
     points: Vec<ConstVector<f64, 2>>,
     points_vector_form: Matrix<f64>,
     edges: Vec<[usize; 2]>,
+    removed_edges: Vec<[usize; 2]>,
     dlambda_dvertices: Matrix<f64>,
     weights_evaluated: Matrix<f64>,
     fiedler_vec: Matrix<f64>,
@@ -26,10 +27,12 @@ impl WeightedLaplacianHandle {
 
         // let start_time = Instant::now();
 
+        let mut n_points = points.len();
 
         // add the contour to the points.
         if let Some(obstacles) = obstacles {
             obstacles.iter().flat_map(|obstacle| obstacle.contour_iter()).for_each(|&p| points.push(p) );
+            n_points += obstacles.len();
         }
 
         let points = points;
@@ -38,7 +41,6 @@ impl WeightedLaplacianHandle {
         let (_, triangles) = delaunay_triangulation( &points );
         // println!("triangles = {triangles:?}");
 
-        let mut n_points = points.len();
 
         // then convert points into the form of 2*n dimensional vector 
         let points_vector_form = {
@@ -80,6 +82,11 @@ impl WeightedLaplacianHandle {
         };
 
         println!("removed_triangles.len() = {}", removed_triangles.len());
+        assert!({
+            removed_triangles.iter().copied().flatten().all(|v| v>=n_robots )
+        },
+            "some robots are being quotiented out."
+        );
 
         // each element in 'edges' corresponds to two indeces of the boundaries
         let (edges, removed_edges) = {
@@ -106,7 +113,7 @@ impl WeightedLaplacianHandle {
         println!("removed_edges.len() = {}", removed_edges.len());
 
         // update 'n_points'
-        n_points = (0..points.len()).filter(|&i| removed_edges.iter().all(|&e| e[1]!=i ) ).count();
+        // n_points = (0..points.len()).filter(|&i| removed_edges.iter().all(|&e| e[1]!=i ) ).count();
         
         // println!("edges = {edges:?}");
         println!("There are {} edges.", edges.len());
@@ -155,16 +162,20 @@ impl WeightedLaplacianHandle {
 
                     let mut e1 = [v_not_in_edge, edges[i][0]];
                     e1.sort();
-                    let e1 = edges.binary_search(&e1).ok();
+                    let e1_idx = edges.binary_search(&e1).ok();
 
                     let mut e2 = [v_not_in_edge, edges[i][1]];
                     e2.sort();
-                    let e2 = edges.binary_search(&e2).ok();
+                    let e2_idx = edges.binary_search(&e2).ok();
 
-                    f += match (e1, e2) {
-                        (Some(e1), Some(e2)) => x[e1] * x[e2],
-                        (Some(e1), None) => x[e1] * 1.0,
-                        (None, Some(e2)) => x[e2] * 1.0,
+                    let weight_of = |e: [usize; 2]| -> f64 {
+                        1.0 / (points[e[0]] - points[e[1]]).two_norm()
+                    };
+
+                    f += match (e1_idx, e2_idx) {
+                        (Some(e1_idx), Some(e2_idx)) => x[e1_idx] * x[e2_idx],
+                        (Some(e1_idx), None) => x[e1_idx] * weight_of( e2 ),
+                        (None, Some(e2_idx)) => x[e2_idx] * weight_of( e1 ),
                         (None, None) => AtomicSmoothFn::Zero,
                     };
                 }
@@ -172,7 +183,6 @@ impl WeightedLaplacianHandle {
                 tmp[(i,j)] = f;
                 tmp[(i,j)].clone()
             } else if let Some(&common_vertex) = edges[i].iter().find(|k| edges[j].contains(k) ) { 
-                ?????? there are more adjacent cases.
                 // if the edges i and j are adjacent, ...
                 let mut the_other_edge = [
                     *edges[i].iter().find(|&&k| k != common_vertex ).unwrap(),
@@ -182,8 +192,11 @@ impl WeightedLaplacianHandle {
 
                 tmp[(i,j)] = if let Ok(the_other_edge) = edges.binary_search(&the_other_edge) {
                     x[i].powf(0.5) * x[j].powf(0.5) * signs[(i,j)] as f64 * x[the_other_edge]
-                } else if removed_edges.binary_search(&the_other_edge).is_ok() {
-                    x[i].powf(0.5) * x[j].powf(0.5) * signs[(i,j)] as f64
+                } else if let Ok(the_other_edge) = removed_edges.binary_search(&the_other_edge) {
+                    let [v1, v2] = removed_edges[the_other_edge];
+                    let [p1, p2] = [points[v1], points[v2]];
+                    let w_of_the_other_edges = 1.0 / (p1 - p2).two_norm();
+                    x[i].powf(0.5) * x[j].powf(0.5) * signs[(i,j)] as f64 * w_of_the_other_edges
                 } else {
                     AtomicSmoothFn::Zero
                 };
@@ -216,7 +229,9 @@ impl WeightedLaplacianHandle {
         // let elapsed_time = start_time.elapsed();
         // println!("constructing laplacian took {:.5} seconds", elapsed_time.as_secs_f64());
         // let start_time = Instant::now();
-        let (spectrum, v) = laplacian_evaluated.clone().spectrum_with_n_th_eigenvec_symmetric(n_points-1 + n_holes-1);
+        println!("n_robots={n_robots}");
+        println!("n_points={n_points}");
+        let (spectrum, v) = laplacian_evaluated.clone().spectrum_with_n_th_eigenvec_symmetric(n_points + n_holes-1);
         println!("spectrum={}", spectrum);
         // println!("v={v:?}");
         // let elapsed_time = start_time.elapsed();
@@ -258,6 +273,7 @@ impl WeightedLaplacianHandle {
             points,
             points_vector_form,
             edges,
+            removed_edges,
             dlambda_dvertices,
             weights_evaluated,
             fiedler_vec: v[(.., 0)].as_matrix(),
@@ -276,13 +292,16 @@ impl WeightedLaplacianHandle {
 
     pub fn edge_pos_iter(&'_ self) -> impl '_ + Iterator<Item = [(f64, f64); 2]> {
         self.edges.iter()
-            .filter(|&&[x,y]| x < self.n_robots && y < self.n_robots )
+            .map(|&[x, y]| [(self.points[x][0], self.points[x][1]), (self.points[y][0], self.points[y][1])] )
+    }
+
+    pub fn removed_edge_pos_iter(&'_ self) -> impl '_ + Iterator<Item = [(f64, f64); 2]> {
+        self.removed_edges.iter()
             .map(|&[x, y]| [(self.points[x][0], self.points[x][1]), (self.points[y][0], self.points[y][1])] )
     }
 
     pub fn weight_iter(&'_ self) -> impl '_ + Iterator<Item = f64> {
         self.edges.iter().enumerate()
-            .filter(|&(_, &[x,y])| x < self.n_robots && y < self.n_robots )
             .map( |(i,_)| self.weights_evaluated[(i,0)] )
     }
 
@@ -308,14 +327,10 @@ impl WeightedLaplacianHandle {
             .map(|x| (x[0], x[1]) )
     }
 
-    pub fn move_points<const POSITIVE_GRAD: bool>(self, step_size: f64, max_move: f64) -> Vec<ConstVector<f64, 2>> {
+    pub fn move_points<const POSITIVE_GRAD: bool>(self, step_size: f64, max_move: f64, obstacles: Option<&[Obstacle]>) -> Vec<ConstVector<f64, 2>> {
         let sign = if POSITIVE_GRAD { 1.0 } else { -1.0 };
         let dv = {
             let mut dv = self.dlambda_dvertices.transpose() * (step_size * sign);
-
-            // for i in self.n_robots*2..self.points.len()*2 {
-            //     dv[(i,0)] = 0.0;
-            // }
 
             if dv.two_norm() > max_move {
                 dv *= max_move / dv.two_norm();
@@ -326,9 +341,24 @@ impl WeightedLaplacianHandle {
         let new_pos = &self.points_vector_form[(..self.n_robots*2,0)] + &dv[(..self.n_robots*2,0)];
 
         // 'points' contains all the points 
-        let points = (0..self.n_robots)
+        let mut points = (0..self.n_robots)
             .map(|i| ConstVector::from( [new_pos[(i*2, 0)], new_pos[(i*2+1, 0)]] ))
             .collect::<Vec<_>>();
+
+        if let Some(obstacles) = obstacles {
+            for p in points.iter_mut() {
+                let d = obstacles.iter()
+                    .map(|obstacle| obstacle.distance_from(*p))
+                    .min_by(|x,y| x.partial_cmp(y).unwrap())
+                    .unwrap();
+
+                // if the distance to the obstacle is less than 1.0 then stop
+                if d.two_norm() < 1.0 {
+                    let step_size = 0.5;
+                    *p -= d * (1.0 - d.two_norm()).powi(2) * step_size;
+                }
+            }
+        }
         
         points
     }
@@ -390,7 +420,7 @@ mod test {
         let lambda1 = handle.laplacian_evaluated.as_matrix().spectrum_with_n_th_eigenvec_symmetric(n-1).0;
         println!("{:.5}", handle.laplacian_evaluated.as_matrix().spectrum());
         let d_norm = (&*handle.dlambda_dvertices).transpose().two_norm();
-        let points = handle.move_points::<true>(step_size, 1.0);
+        let points = handle.move_points::<true>(step_size, 1.0, None);
 
         // the second computation
         let triangulation2 = delaunay_triangulation(&points).1;

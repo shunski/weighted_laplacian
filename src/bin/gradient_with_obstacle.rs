@@ -1,10 +1,10 @@
+use std::ops::{Range, RangeBounds};
 use std::time::Instant;
 
-use laplacian::obstacles::{self, Obstacle};
+use laplacian::obstacles::Obstacle;
 use plotters::prelude::*;
 use laplacian::WeightedLaplacianHandle;
 use laplacian::embedding_lib::Collection;
-use alg::lin_alg::ConstVector;
 
 const FOLLOWS_POSITIVE_OF_GRADIENT: bool = true;
 const N_HOLES_TO_CREATE: usize = 50;
@@ -16,7 +16,7 @@ const COLORING_BY_EIGENVEC: bool = false;
 
 fn main() -> Result<(), Box<dyn std::error::Error>>  {
     // let embedding_type = Collection::FourPoints;
-    let embedding_type = Collection::Meshlike;
+    let embedding_type = Collection::ForObstacles;
     let mut points = embedding_type.get();
     let original_points = points.clone();
     
@@ -39,6 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
         let mut obstacles = Obstacle::get();
         for obstacle in &obstacles {
             obstacle.remove_points_contained(&mut points);
+            obstacle.remove_points_closer_than(1.5, &mut points);
         }
 
         {
@@ -78,7 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
                     for (ends, value) in handle.edge_pos_iter().zip(handle.fiedler_vec_iter()) {
                         graphic.draw_series(LineSeries::new(
                             ends.into_iter(),
-                            get_color_bwr(value / norm).filled().stroke_width(2)
+                            get_color_bwr(value / norm, -1.0..1.0).filled().stroke_width(2)
                         ))?;
                     }
                 } else {
@@ -89,21 +90,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
                     {
                         graphic.draw_series(LineSeries::new(
                             ends.into_iter(),
-                            get_color_bwr( (w / 2.0).min(1.0) ).filled().stroke_width(2)
+                            get_color_bwr( (w * 2.0).min(1.0), -1.0..1.0 ).filled().stroke_width(2)
                         ))?;
                     }
+
+                    // // draw the removed_edges
+                    // for ends in handle
+                    //     .removed_edge_pos_iter()
+                    // {
+                    //     graphic.draw_series(LineSeries::new(
+                    //         ends.into_iter(),
+                    //         BLACK
+                    //     ))?;
+                    // }
                 }
             }
     
             
+            
+            // // draw virtual robots
+            // graphic.draw_series( handle.virtual_robot_pos_iter()
+            //     .map(|(x,y)| Circle::new((x, y), 2, RED.filled()))
+            // )?;
+
+
             // draw vertices
             graphic.draw_series( handle.vertex_pos_iter()
                 .map(|(x,y)| Circle::new((x, y), 2, BLACK.filled()))
-            )?;
-
-            // draw virtual robots
-            graphic.draw_series( handle.virtual_robot_pos_iter()
-                .map(|(x,y)| Circle::new((x, y), 2, RED.filled()))
             )?;
 
             // draw obstacles 
@@ -118,23 +131,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
                         .chain([obstacle.contour_iter().next().unwrap()])
                         .map(|v| (v[0], v[1]))
                         .collect::<Vec<_>>(),
-                    &BLACK
+                    BLACK.filled().stroke_width(2)
                 )))?;
             }
+            root.present()?;
         }
         
         
         // move the points by gradient discent
-        points = handle.move_points::<FOLLOWS_POSITIVE_OF_GRADIENT>(STEP_SIZE, 2.0);
+        points = handle.move_points::<FOLLOWS_POSITIVE_OF_GRADIENT>(STEP_SIZE, 2.0, Some(&obstacles));
         println!("");
-        root.present()?;
     }
 
     Ok(())
 }
 
-fn get_color_bwr(val: f64) -> RGBColor {
-    assert!( -1.0 <= val && val <= 1.0 );
+fn get_color_bwr(val: f64, r: Range<f64>) -> RGBColor {
+    assert!( r.start <= val && val <= r.end );
+    assert!( r.start < r.end );
+
+    // normalize val to -1.0..1.0
+    let val = (val - r.start) / (r.end - r.start) * 2.0 - 1.0;
+
     if val >= 0.0 {
         RGBColor(255, (255.0 * (1.0 - val)) as u8, (255.0 * (1.0 - val)) as u8)
     } else {
