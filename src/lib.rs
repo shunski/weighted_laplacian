@@ -231,7 +231,7 @@ impl WeightedLaplacianHandle {
         // let start_time = Instant::now();
         println!("n_robots={n_robots}");
         println!("n_points={n_points}");
-        let (spectrum, v) = laplacian_evaluated.clone().spectrum_with_n_th_eigenvec_symmetric(n_points + n_holes-1);
+        let (spectrum, v) = laplacian_evaluated.clone().spectrum_with_n_th_eigenvec_symmetric(n_points-1 + n_holes-1);
         println!("spectrum={}", spectrum);
         // println!("v={v:?}");
         // let elapsed_time = start_time.elapsed();

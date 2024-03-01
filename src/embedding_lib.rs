@@ -124,9 +124,21 @@ impl Collection {
             Self::ForObstacles => {
                 let n = 500;
                 let mut out = Vec::new();
+
+                // Randomly add 500 points.
                 while out.len() < n {
                     let p = ConstVector::from( [ rng.gen_range(-37.0..37.0), rng.gen_range(-37.0..37.0) ]);
-                    if out.iter().all(|&q| (p-q).two_norm() > 2.0 ) {
+                    if out.iter().all(|&q| (p-q).two_norm() > 2.5 ) {
+                        out.push(p);
+                    }
+                }
+
+                // Then add more points on sides.
+                let n_additional = 50;
+                while out.len() < n + n_additional {
+                    let p = ConstVector::from( [ rng.gen_range(-37.0..37.0), rng.gen_range(-37.0..37.0) ]);
+                    let forbidden_range = -30.0..30.0;
+                    if out.iter().all(|&q| (p-q).two_norm() > 2.5 ) && !(forbidden_range.contains(&p[0]) && forbidden_range.contains(&p[1])) {
                         out.push(p);
                     }
                 }
@@ -139,30 +151,30 @@ impl Collection {
                     (ConstVector::from([-16.0, 17.0]), 10.0),
                 ];
 
-                for (center, r) in circles {
-                    for p in &mut out{
-                        let d = (*p - center).two_norm();
-                        if d >= r {continue;}
+                // for (center, r) in circles {
+                //     for p in &mut out{
+                //         let d = (*p - center).two_norm();
+                //         if d >= r {continue;}
 
-                        let s = (d/r).cbrt();
-                        *p = center + (*p - center) * (s * r / d)
-                    }
-                }
+                //         let s = (d/r).cbrt();
+                //         *p = center + (*p - center) * (s * r / d)
+                //     }
+                // }
 
                 
                 // Remove points that are too close to each other.
-                let mut i=0;
-                while i < out.len() {
-                    let mut j = i+1;
-                    while j < out.len() {
-                        if (out[i]-out[j]).two_norm() < 1.2 {
-                            out.remove(j);
-                        } else {
-                            j += 1;
-                        }
-                    }
-                    i += 1;
-                }
+                // let mut i=0;
+                // while i < out.len() {
+                //     let mut j = i+1;
+                //     while j < out.len() {
+                //         if (out[i]-out[j]).two_norm() < 1.2 {
+                //             out.remove(j);
+                //         } else {
+                //             j += 1;
+                //         }
+                //     }
+                //     i += 1;
+                // }
 
                 println!("There are {} robots.", out.len());
 

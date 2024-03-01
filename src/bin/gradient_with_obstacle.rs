@@ -1,4 +1,4 @@
-use std::ops::{Range, RangeBounds};
+use std::ops::Range;
 use std::time::Instant;
 
 use laplacian::obstacles::Obstacle;
@@ -18,7 +18,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
     // let embedding_type = Collection::FourPoints;
     let embedding_type = Collection::ForObstacles;
     let mut points = embedding_type.get();
-    let original_points = points.clone();
     
     let gradient_type_desc = if FOLLOWS_POSITIVE_OF_GRADIENT { "CollapsingHoles" } else { "CreatingHoles" };
     let file_name = format!("program_outputs/WITH_OBSTACLES==={}==={}===STEP_SIZE:{STEP_SIZE}===EDGES:{:?}===COLORING_BY:{:?}==={}_ROBOTS.jpg", 
@@ -30,10 +29,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
     );
     let root = BitMapBackend::new(
         &file_name, 
-        (1000, 1000)
+        (1500, 750)
     ).into_drawing_area();
     root.fill(&WHITE)?;
-    let panels = root.split_evenly((3,3));
+    let panels = root.split_evenly((2, 4));
 
     let obstacles = {
         let mut obstacles = Obstacle::get();
@@ -56,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
         obstacles
     };
 
-    for t in 0..=80 {
+    for t in 0..=70 {
         let start_time = Instant::now();
         let n_holes = if FOLLOWS_POSITIVE_OF_GRADIENT {None} else {Some(N_HOLES_TO_CREATE)};
         let handle = WeightedLaplacianHandle::new_from_points(points, n_holes, Some(&obstacles));
@@ -68,7 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
             let panel = &panels[t / 10];
             let mut graphic = ChartBuilder::on(&panel)
                 .margin(10)
-                .caption(format!("t={t}"), ("san-serif", 20))
+                .caption(format!("t={t}"), ("san-serif", 40))
                 .build_cartesian_2d(-50.0..50.0, -50.0..50.0)?;
             
             // draw edges
@@ -90,7 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
                     {
                         graphic.draw_series(LineSeries::new(
                             ends.into_iter(),
-                            get_color_bwr( (w * 2.0).min(1.0), -1.0..1.0 ).filled().stroke_width(2)
+                            get_color_bwr( w.min(1.0), -1.0..1.0 ).filled().stroke_width(2)
                         ))?;
                     }
 
