@@ -31,7 +31,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
             .x_label_area_size(35)
             .y_label_area_size(40)
             .margin(5)
-            .caption("First 10 Non-zero Eigenvalues", ("sans-serif", 20))
             .build_cartesian_2d((1u32..10u32).into_segmented(), 0f64..1.0)?;
 
         histogram
@@ -50,7 +49,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
         // ========================= DRAWING THE WEIGHTS =================================
         let mut w = ChartBuilder::on(&w)
             .margin(10)
-            .caption(format!("Weights"), ("san-serif", 20))
             .build_cartesian_2d(-50.0..50.0, -50.0..50.0)?;
 
         // draw triangles
@@ -80,7 +78,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
         // ========================= DRAWING THE FIRST EIGENVECTOR =================================
         let mut v1 = ChartBuilder::on(&v1)
         .margin(10)
-        .caption(format!("First Eigenvector"), ("san-serif", 20))
         .build_cartesian_2d(-50.0..50.0, -50.0..50.0)?;
 
         let norm = (0..edges.len()).map(|i| eigenvec[(i,0)].abs() ).max_by(|x,y| x.partial_cmp(y).unwrap() ).unwrap() + 0.001;
@@ -101,7 +98,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
         // ========================= DRAWING THE SECOND EIGENVECTOR =================================
         let mut v2 = ChartBuilder::on(&v2)
         .margin(10)
-        .caption(format!("Second Eigenvector"), ("san-serif", 20))
         .build_cartesian_2d(-50.0..50.0, -50.0..50.0)?;
 
         // draw edges

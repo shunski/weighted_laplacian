@@ -2,10 +2,8 @@ use std::f64::consts::PI;
 
 use alg::lin_alg::ConstVector;
 use geom::delaunay_triangulation;
-use plotters::element::Circle;
 use rand::prelude::*;
 
-use crate::obstacles::Obstacle;
 
 pub enum Collection {
     FourPoints,
@@ -48,7 +46,7 @@ impl Collection {
                         let s = i as f64 / n as f64;
                         let p = v + (w-v)*s + ConstVector::from([rng.gen_range(-2.0..2.0), rng.gen_range(-2.0..2.0)]);
 
-                        if out.iter().all(|&q| (p - q).two_norm() > 1.0) {
+                        if out.iter().all(|&q| (p - q).two_norm() > 1.5) {
                             out.push( p );
                             i+=1;
                         }
@@ -84,12 +82,12 @@ impl Collection {
                     add_points([v, w]);
                 }
 
-                let n_random_points = 30;
+                let n_random_points = 35;
                 let mut i = 0;
                 while i < n_random_points {
                     let p = ConstVector::from([rng.gen_range(-35.0..35.0), rng.gen_range(-35.0..35.0)]);
 
-                    if out.iter().all(|&q| (q - p).two_norm() > 1.0 ) {
+                    if out.iter().all(|&q| (q - p).two_norm() > 2.0 ) {
                         out.push(p);
                         i+=1;
                     }
@@ -134,11 +132,11 @@ impl Collection {
                 }
 
                 // Then add more points on sides.
-                let n_additional = 50;
+                let n_additional = 80;
                 while out.len() < n + n_additional {
                     let p = ConstVector::from( [ rng.gen_range(-37.0..37.0), rng.gen_range(-37.0..37.0) ]);
-                    let forbidden_range = -30.0..30.0;
-                    if out.iter().all(|&q| (p-q).two_norm() > 2.5 ) && !(forbidden_range.contains(&p[0]) && forbidden_range.contains(&p[1])) {
+                    let forbidden_range = -32.0..32.0;
+                    if out.iter().all(|&q| (p-q).two_norm() > 2.0 ) && !(forbidden_range.contains(&p[0]) && forbidden_range.contains(&p[1])) {
                         out.push(p);
                     }
                 }
@@ -151,30 +149,30 @@ impl Collection {
                     (ConstVector::from([-16.0, 17.0]), 10.0),
                 ];
 
-                // for (center, r) in circles {
-                //     for p in &mut out{
-                //         let d = (*p - center).two_norm();
-                //         if d >= r {continue;}
+                for (center, r) in circles {
+                    for p in &mut out{
+                        let d = (*p - center).two_norm();
+                        if d >= r {continue;}
 
-                //         let s = (d/r).cbrt();
-                //         *p = center + (*p - center) * (s * r / d)
-                //     }
-                // }
+                        let s = (d/r).cbrt();
+                        *p = center + (*p - center) * (s * r / d)
+                    }
+                }
 
                 
                 // Remove points that are too close to each other.
-                // let mut i=0;
-                // while i < out.len() {
-                //     let mut j = i+1;
-                //     while j < out.len() {
-                //         if (out[i]-out[j]).two_norm() < 1.2 {
-                //             out.remove(j);
-                //         } else {
-                //             j += 1;
-                //         }
-                //     }
-                //     i += 1;
-                // }
+                let mut i=0;
+                while i < out.len() {
+                    let mut j = i+1;
+                    while j < out.len() {
+                        if (out[i]-out[j]).two_norm() < 1.2 {
+                            out.remove(j);
+                        } else {
+                            j += 1;
+                        }
+                    }
+                    i += 1;
+                }
 
                 println!("There are {} robots.", out.len());
 

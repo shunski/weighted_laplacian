@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
 
 
         // move the points by gradient discent
-        points = handle.move_points::<FOLLOWS_POSITIVE_OF_GRADIENT>(STEP_SIZE, 2.0);
+        points = handle.move_points::<FOLLOWS_POSITIVE_OF_GRADIENT>(STEP_SIZE, 2.0, None);
     }
 
     Ok(())

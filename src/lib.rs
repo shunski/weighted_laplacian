@@ -2,7 +2,8 @@ use alg::lin_alg::{Matrix, SubMatrix, ConstVector, SparseMatrix};
 use geom::delaunay_triangulation;
 use analysis::{MultiVarFn, AtomicSmoothFn, Function};
 use obstacles::Obstacle;
-// use std::time::Instant;
+
+
 
 #[allow(unused)]
 pub struct WeightedLaplacianHandle {
@@ -16,6 +17,8 @@ pub struct WeightedLaplacianHandle {
     laplacian_evaluated: Matrix<f64>,
     n_robots: usize,
 }
+
+
 
 impl WeightedLaplacianHandle {
     pub fn new_from_points(mut points: Vec<ConstVector<f64, 2>>, n_holes: Option<usize>, obstacles: Option<&[Obstacle]>) -> Self {

@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
     let mut points = embedding_type.get();
     
     let gradient_type_desc = if FOLLOWS_POSITIVE_OF_GRADIENT { "CollapsingHoles" } else { "CreatingHoles" };
-    let file_name = format!("program_outputs/WITH_OBSTACLES==={}==={}===STEP_SIZE:{STEP_SIZE}===EDGES:{:?}===COLORING_BY:{:?}==={}_ROBOTS.jpg", 
+    let file_name = format!("program_outputs/WITH_OBSTACLES==={}==={}===STEP_SIZE:{STEP_SIZE}===EDGES:{:?}===COLORING_BY:{:?}==={}_ROBOTS(5).jpg", 
         embedding_type.name(), 
         gradient_type_desc, 
         DRAW_EDGES,

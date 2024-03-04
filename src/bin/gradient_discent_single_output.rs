@@ -18,20 +18,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
     let mut points = embedding_type.get();
     
     let gradient_type_desc = if FOLLOWS_POSITIVE_OF_GRADIENT { "CollapsingHoles" } else { "CreatingHoles" };
-    let file_name = format!("program_outputs/{}==={}===STEP_SIZE:{STEP_SIZE}===EDGES:{:?}===COLORING_BY:{:?}.jpg", 
+    let file_name = format!("program_outputs/{}==={}===STEP_SIZE:{STEP_SIZE}===EDGES:{:?}===COLORING_BY:{:?}===N_ROBOTS:{}.jpg", 
         embedding_type.name(), 
         gradient_type_desc, 
         DRAW_EDGES,
-        if COLORING_BY_EIGENVEC {"EIGENVEC"} else {"WEIGHTS"}
+        if COLORING_BY_EIGENVEC {"EIGENVEC"} else {"WEIGHTS"},
+        points.len()
     );
     let root = BitMapBackend::new(
         &file_name, 
-        (1000, 1000)
+        (1500, 750)
     ).into_drawing_area();
     root.fill(&WHITE)?;
-    let panels = root.split_evenly((3,3));
+    let panels = root.split_evenly((2,4));
 
-    for t in 0..=80 {
+    for t in 0..=70 {
         let start_time = Instant::now();
         let handle = if FOLLOWS_POSITIVE_OF_GRADIENT {
             WeightedLaplacianHandle::new_from_points(points, None, None)
@@ -46,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
             let panel = &panels[t / 10];
             let mut graphic = ChartBuilder::on(&panel)
                 .margin(10)
-                .caption(format!("t={t}"), ("san-serif", 20))
+                .caption(format!("t={t}"), ("san-serif", 40))
                 .build_cartesian_2d(-50.0..50.0, -50.0..50.0)?;
 
             
@@ -83,7 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
         
         
         // move the points by gradient discent
-        points = handle.move_points::<FOLLOWS_POSITIVE_OF_GRADIENT>(STEP_SIZE, 2.0);
+        points = handle.move_points::<FOLLOWS_POSITIVE_OF_GRADIENT>(STEP_SIZE, 2.0, None);
         println!("");
         root.present()?;
     }
