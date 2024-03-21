@@ -1,4 +1,4 @@
-use std::f64::consts::PI;
+use std::f64::consts::{PI, TAU};
 
 use alg::lin_alg::ConstVector;
 use geom::delaunay_triangulation;
@@ -12,6 +12,7 @@ pub enum Collection {
     Uniform(usize),
     HexagonalLattice,
     ForObstacles,
+    ThreeHoles,
 }
 
 impl Collection {
@@ -177,6 +178,28 @@ impl Collection {
                 println!("There are {} robots.", out.len());
 
                 out
+            },
+
+            Self::ThreeHoles => {
+                let circles = [
+                    (ConstVector::from([0.0, 15.0]), 18.0),
+                    (ConstVector::from([-10.0, -10.0]), 18.0),
+                    (ConstVector::from([12.0, -13.0]), 18.0),
+                ];
+
+                let mut out = Vec::new();
+                
+                while out.len() < 150 {
+                    let (center, r) = circles[rng.gen_range(0..3)];
+                    let angle = rng.gen_range(0.0..TAU);
+                    let noise = rng.gen_range(-1_f64..1_f64).powi(2) * 3.0;
+                    let p = ConstVector::from( [ angle.cos(), angle.sin() ]) * (r + noise) + center;
+                    if out.iter().all(|q| (p-*q).two_norm() > 1.5) {
+                        out.push(p);
+                    }
+                }
+
+                out
             }
         }
     }
@@ -189,6 +212,7 @@ impl Collection {
             Self::Uniform(n) => format!("Uniform({n})"),
             Self::HexagonalLattice => String::from( "HexagonalLattice" ),
             Self::ForObstacles => String::from( "ForObstacles" ),
+            Self::ThreeHoles => String::from("Three holes")
         }
     }
 }
