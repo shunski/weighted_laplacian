@@ -182,22 +182,36 @@ impl Collection {
 
             Self::ThreeHoles => {
                 let circles = [
-                    (ConstVector::from([0.0, 15.0]), 18.0),
-                    (ConstVector::from([-10.0, -10.0]), 18.0),
-                    (ConstVector::from([12.0, -13.0]), 18.0),
+                    (ConstVector::from([0.0, 18.0]), 18.0),
+                    (ConstVector::from([-16.0, -12.0]), 18.0),
+                    (ConstVector::from([16.0, -11.0]), 15.0),
                 ];
 
                 let mut out = Vec::new();
                 
-                while out.len() < 150 {
+                while out.len() < 180 {
                     let (center, r) = circles[rng.gen_range(0..3)];
                     let angle = rng.gen_range(0.0..TAU);
-                    let noise = rng.gen_range(-1_f64..1_f64).powi(2) * 3.0;
+                    let noise = rng.gen_range(0_f64..1.0).powi(2) * 4.0 * if rng.gen_bool(0.5) {-1.0} else {1.0};
                     let p = ConstVector::from( [ angle.cos(), angle.sin() ]) * (r + noise) + center;
                     if out.iter().all(|q| (p-*q).two_norm() > 1.5) {
                         out.push(p);
                     }
                 }
+
+                while out.len() < 190 {
+                    let p = ConstVector::from([rng.gen_range(-40.0..40.0), rng.gen_range(-40.0..40.0)] );
+                    if out.iter().all(|q| (p-*q).two_norm() > 7.0) && circles.iter().any(|&(c, r)| (p-c).two_norm() < r ) {
+                        out.push(p);
+                    }
+                }
+
+                out.push(ConstVector::from([-24.0,13.0]));
+                out.push(ConstVector::from([-28.0,10.0]));
+                out.push(ConstVector::from([0.0,-30.0]));
+                out.push(ConstVector::from([3.0,-28.0]));
+                out.push(ConstVector::from([26.0,11.0]));
+                out.push(ConstVector::from([29.0, 8.0]));
 
                 out
             }
