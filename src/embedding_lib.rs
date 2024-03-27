@@ -206,11 +206,11 @@ impl Collection {
                     }
                 }
 
-                out.push(ConstVector::from([-24.0,13.0]));
+                out.push(ConstVector::from([-24.0,15.0]));
                 out.push(ConstVector::from([-28.0,10.0]));
                 out.push(ConstVector::from([0.0,-30.0]));
                 out.push(ConstVector::from([3.0,-28.0]));
-                out.push(ConstVector::from([26.0,11.0]));
+                out.push(ConstVector::from([26.0,13.0]));
                 out.push(ConstVector::from([29.0, 8.0]));
 
                 out
