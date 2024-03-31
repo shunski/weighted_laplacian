@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-alg = { path = "../../toppo/alg" }
-topo_spaces = { path = "../../toppo/topo_spaces" }
-geom = { path = "../../toppo/geom" }
-analysis = { path = "../../toppo/analysis" }
+alg = { git = "https://github.com/shunski/toppo.git" }
+topo_spaces = { git = "https://github.com/shunski/toppo.git" }
+geom = { git = "https://github.com/shunski/toppo.git" }
+analysis = { git = "https://github.com/shunski/toppo.git" }
 rand = "*"
 plotters = "*"

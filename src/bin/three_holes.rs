@@ -126,7 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
     // ========================= DRAWING THE WEIGHTS =================================
     let mut w = ChartBuilder::on(&weight_root)
         .margin(10)
-        .build_cartesian_2d(-50.0..50.0, -50.0..50.0)?;
+        .build_cartesian_2d(-40.0..40.0, -40.0..40.0)?;
 
     // draw triangles
     let weight_iter = (0..triangles.len()).map(|i| w2_sq[(i,i)].sqrt());
@@ -134,17 +134,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
     for (t, weight) in triangles.iter().zip( weight_iter ) {
         w.draw_series(std::iter::once(Polygon::new(
             t.iter().map(|&i| points[i] ).map(|x| (x[0], x[1]) ).collect::<Vec<_>>(),
-            get_color_bwr( weight/norm )
+            get_color_wg( (weight/norm).cbrt() )
         )))?;
     }
 
     // draw edges
-    let weight_iter = (0..edges.len()).map(|i| w1[(i,i)] );
-    let norm = weight_iter.clone().max_by(|x,y| x.partial_cmp(y).unwrap() ).unwrap() + 0.001;
-    for (ends, weight) in edges.iter().zip( weight_iter ) {
+    for ends in &edges {
         w.draw_series(LineSeries::new(
             ends.into_iter().map(|&i| points[i] ).map(|v| (v[0], v[1]) ),
-            get_color_bwr( weight/norm ).filled().stroke_width(2)
+            BLACK.filled().stroke_width(1)
         ))?;
     }
 
@@ -159,14 +157,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>>  {
     for (i, panel) in eigenvec_panels.iter().enumerate() {
         let mut panel = ChartBuilder::on(&panel)
         .margin(10)
-        .build_cartesian_2d(-50.0..50.0, -50.0..50.0)?;
+        .build_cartesian_2d(-40.0..40.0, -40.0..40.0)?;
 
         // draw edges
         let norm = (0..edges.len()).map(|j| eigenvecs[(j,i)].abs() ).max_by(|x,y| x.partial_cmp(y).unwrap() ).unwrap() + 0.001;
         for (j, &edge) in edges.iter().enumerate() {
             panel.draw_series(LineSeries::new(
                 edge.into_iter().map(|v| points[v] ).map(|p| (p[0], p[1])),
-                get_color_bwr( eigenvecs[(j,i)]/norm ).filled().stroke_width(2)
+                get_color_bwr( eigenvecs[(j,i)]/norm ).filled().stroke_width(4)
             ))?;
         }
     
@@ -191,6 +189,11 @@ fn get_color_bwr(val: f64) -> RGBColor {
     } else {
         RGBColor((255.0 * (1.0 + val)) as u8, (255.0 * (1.0 + val)) as u8, 255)
     }
+}
+
+fn get_color_wg(val: f64) -> RGBColor {
+    assert!( 0.0 <= val && val <= 1.0, "val = {val}");
+    RGBColor((255.0 * (1.0 - val)) as u8, 255, (255.0 * (1.0 - val)) as u8)
 }
 
 fn w(e: &[usize; 2], points: &Vec<ConstVector<f64, 2>>)  -> f64 {
